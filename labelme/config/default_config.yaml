@@ -49,6 +49,8 @@ shortcuts:
 
   open_next: D
   open_prev: A
+  copy_next: Shift+D
+  copy_prev: Shift+A
 
   zoom_in: Ctrl++
   zoom_out: Ctrl+-

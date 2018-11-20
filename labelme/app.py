@@ -198,8 +198,15 @@ class MainWindow(QtWidgets.QMainWindow, WindowMixin):
                              shortcuts['open_next'], 'next', u'Open Next',
                              enabled=False)
         openPrevImg = action('&Prev Image', self.openPrevImg,
-                             shortcuts['open_prev'], 'prev', u'Open Prev',
+                             shortcuts['copy_prev'], 'prev', u'Open Prev',
                              enabled=False)
+        copyToNextImg = action('Copy to Next', self.copyToNextImg,
+                             shortcuts['open_next'], 'copy-next', u'Copy to Next',
+                             enabled=False)
+        copyToPrevImg = action('Copy to Prev', self.copyToPrevImg,
+                             shortcuts['copy_prev'], 'copy-prev', u'Copy to Prev',
+                             enabled=False)
+
         save = action('&Save', self.saveFile, shortcuts['save'], 'save',
                       'Save labels to file', enabled=False)
         saveAs = action('&Save As', self.saveFileAs, shortcuts['save_as'],
@@ -1153,7 +1160,7 @@ class MainWindow(QtWidgets.QMainWindow, WindowMixin):
         if self.mayContinue():
             self.loadFile(filename)
 
-    def openPrevImg(self, _value=False):
+    def openPrevImg(self, _value=False, copy_annotations=False):
         if not self.mayContinue():
             return
 
@@ -1168,8 +1175,11 @@ class MainWindow(QtWidgets.QMainWindow, WindowMixin):
             filename = self.imageList[currIndex - 1]
             if filename:
                 self.loadFile(filename)
+    
+    def copyToPrevImg(self, _value=False):
+        self.openPrevImg(_value, copy_annotations=True)
 
-    def openNextImg(self, _value=False, load=True):
+    def openNextImg(self, _value=False, load=True, copy_annotations=False):
         if not self.mayContinue():
             return
 
@@ -1189,6 +1199,9 @@ class MainWindow(QtWidgets.QMainWindow, WindowMixin):
 
         if self.filename and load:
             self.loadFile(self.filename)
+
+    def copyToNextImg(self, _value=False, load=True):
+        self.openNextImg(_value, load=load, copy_annotations=True)
 
     def openFile(self, _value=False):
         if not self.mayContinue():

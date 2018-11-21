@@ -205,6 +205,11 @@ class MainWindow(QtWidgets.QMainWindow, WindowMixin):
         saveAs = action('&Save As', self.saveFileAs, shortcuts['save_as'],
                         'save-as', 'Save labels to a different file',
                         enabled=False)
+
+        autosave = action("&Auto Saving", self.setAutoSave, shortcuts['auto_save'], 
+            checkable=True, enabled=True)
+        autosave.setChecked(self._config['auto_save'])
+
         close = action('&Close', self.closeFile, shortcuts['close'], 'close',
                        'Close current file')
         color1 = action('Polygon &Line Color', self.chooseColor1,
@@ -324,7 +329,7 @@ class MainWindow(QtWidgets.QMainWindow, WindowMixin):
         # Group zoom controls into a list for easier toggling.
         zoomActions = (self.zoomWidget, zoomIn, zoomOut, zoomOrg,
                        fitWindow, fitWidth)
-        self.zoomMode = self.MANUAL_ZOOM
+        self.zoomMode = self.FIT_WINDOW
         self.scalers = {
             self.FIT_WINDOW: self.scaleFitWindow,
             self.FIT_WIDTH: self.scaleFitWidth,
@@ -362,6 +367,7 @@ class MainWindow(QtWidgets.QMainWindow, WindowMixin):
 
         # Store actions for further handling.
         self.actions = struct(
+            autosave=autosave,
             save=save, saveAs=saveAs, open=open_, close=close,
             lineColor=color1, fillColor=color2,
             delete=delete, edit=edit, copy=copy,
@@ -428,7 +434,10 @@ class MainWindow(QtWidgets.QMainWindow, WindowMixin):
                                      opendir,
                                      self.menus.recentFiles,
                                      None,
-                                     save, saveAs, close, None, quit))
+                                     save, saveAs, None,
+                                     autosave,
+                                     None,
+                                     close, None, quit))
         addActions(self.menus.help, (help,))
         addActions(self.menus.view, (
             self.flag_dock.toggleViewAction(),
@@ -542,6 +551,8 @@ class MainWindow(QtWidgets.QMainWindow, WindowMixin):
         self.populateModeActions()
 
         self.copy_prev_shapes = {}
+
+        self.actions.fitWindow.setChecked(Qt.Checked)
         # self.firstStart = True
         # if self.firstStart:
         #    QWhatsThis.enterWhatsThisMode()
@@ -570,7 +581,7 @@ class MainWindow(QtWidgets.QMainWindow, WindowMixin):
         addActions(self.menus.edit, actions + self.actions.editMenu)
 
     def setDirty(self):
-        if self._config['auto_save']:
+        if self._config['auto_save'] or self.actions.autosave.isChecked():
             label_file = os.path.splitext(self.imagePath)[0] + '.json'
             self.saveLabels(label_file)
             return
@@ -981,6 +992,9 @@ class MainWindow(QtWidgets.QMainWindow, WindowMixin):
                 self.scrollBars[Qt.Horizontal].value() + x_shift)
             self.scrollBars[Qt.Vertical].setValue(
                 self.scrollBars[Qt.Vertical].value() + y_shift)
+
+    def setAutoSave(self, value=True):
+        self.actions.autosave.setChecked(value)
 
     def setFitWindow(self, value=True):
         if value:

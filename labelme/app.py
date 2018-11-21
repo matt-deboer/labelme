@@ -206,7 +206,7 @@ class MainWindow(QtWidgets.QMainWindow, WindowMixin):
                         'save-as', 'Save labels to a different file',
                         enabled=False)
 
-        autosave = action("&Auto Saving", self.setAutoSave, shortcuts['auto_save'], 
+        autosave = action("Save &Automatically", self.setAutoSave, shortcuts['auto_save'], 
             checkable=True, enabled=True)
         autosave.setChecked(self._config['auto_save'])
 

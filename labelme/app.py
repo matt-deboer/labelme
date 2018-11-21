@@ -800,7 +800,7 @@ class MainWindow(QtWidgets.QMainWindow, WindowMixin):
         if currIndex < len(self.imageList):
             filename = self.imageList[currIndex]
             if filename:
-                self.loadFile(filename)
+                self.loadFile(filename, copy_prev_shapes=self.shouldCopyShapes())
 
     # React to canvas signals.
     def shapeSelectionChanged(self, selected=False):
@@ -1037,10 +1037,12 @@ class MainWindow(QtWidgets.QMainWindow, WindowMixin):
             self.fileListWidget.repaint()
             return
         
+        print("loadFile(filename={}, copy_prev_shapes={})".format(filename, copy_prev_shapes))
+
         copied_from = ''
         if copy_prev_shapes:
             prev_shapes = [shape for _, shape in self.labelList.itemsToShapes]
-            copied_from = ' (copied shapes from {})'.format(os.path.basename(self.filename))
+            copied_from = ' (copied shapes)'
 
         self.resetState()
         self.canvas.setEnabled(False)
@@ -1181,6 +1183,9 @@ class MainWindow(QtWidgets.QMainWindow, WindowMixin):
         # ask the use for where to save the labels
         # self.settings.setValue('window/geometry', self.saveGeometry())
 
+    def shouldCopyShapes(self):
+        return (QtGui.QGuiApplication.keyboardModifiers() == (QtCore.Qt.ControlModifier | QtCore.Qt.AltModifier))
+
     # User Dialogs #
 
     def loadRecent(self, filename):
@@ -1188,6 +1193,9 @@ class MainWindow(QtWidgets.QMainWindow, WindowMixin):
             self.loadFile(filename)
 
     def openPrevImg(self, _value=False):
+        # save this eagerly; the 'mayContinue()' dialog will reset it if shown
+        shouldCopyShapes = self.shouldCopyShapes()
+        
         if not self.mayContinue():
             return
 
@@ -1198,15 +1206,15 @@ class MainWindow(QtWidgets.QMainWindow, WindowMixin):
             return
 
         currIndex = self.imageList.index(self.filename)
-        copy_prev_shapes = False
         if currIndex - 1 >= 0:
-            if QtGui.QGuiApplication.keyboardModifiers() == (QtCore.Qt.ControlModifier | QtCore.Qt.AltModifier):
-                copy_prev_shapes = True
             filename = self.imageList[currIndex - 1]
             if filename:
-                self.loadFile(filename, copy_prev_shapes=copy_prev_shapes)
+                self.loadFile(filename, copy_prev_shapes=shouldCopyShapes)
     
     def openNextImg(self, _value=False, load=True):
+        # save this eagerly; the 'mayContinue()' dialog will reset it if shown
+        shouldCopyShapes = self.shouldCopyShapes()
+        
         if not self.mayContinue():
             return
         
@@ -1214,12 +1222,9 @@ class MainWindow(QtWidgets.QMainWindow, WindowMixin):
             return
 
         filename = None
-        copy_prev_shapes = False
         if self.filename is None:
             filename = self.imageList[0]
         else:
-            if QtGui.QGuiApplication.keyboardModifiers() == (QtCore.Qt.ControlModifier | QtCore.Qt.AltModifier):
-                copy_prev_shapes = True
             currIndex = self.imageList.index(self.filename)
             if currIndex + 1 < len(self.imageList):
                 filename = self.imageList[currIndex + 1]
@@ -1228,7 +1233,7 @@ class MainWindow(QtWidgets.QMainWindow, WindowMixin):
         self.filename = filename
 
         if self.filename and load:
-            self.loadFile(self.filename, copy_prev_shapes=copy_prev_shapes)
+            self.loadFile(self.filename, copy_prev_shapes=shouldCopyShapes)
 
     def openFile(self, _value=False):
         if not self.mayContinue():
@@ -1245,7 +1250,6 @@ class MainWindow(QtWidgets.QMainWindow, WindowMixin):
             filename, _ = filename
         filename = str(filename)
         if filename:
-            print("loadFile({}) called from openFile".format(filename))
             self.loadFile(filename)
 
     def saveFile(self, _value=False):

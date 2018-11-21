@@ -195,18 +195,11 @@ class MainWindow(QtWidgets.QMainWindow, WindowMixin):
         opendir = action('&Open Dir', self.openDirDialog,
                          shortcuts['open_dir'], 'open', u'Open Dir')
         openNextImg = action('&Next Image', self.openNextImg,
-                             shortcuts['open_next'], 'next', u'Open Next',
+                             shortcuts['open_next'], 'next', u'Open Next (hold CTL+ALT to Copy Labels)',
                              enabled=False)
         openPrevImg = action('&Prev Image', self.openPrevImg,
-                             shortcuts['copy_prev'], 'prev', u'Open Prev',
+                             shortcuts['open_prev'], 'prev', u'Open Prev (hold CTL+ALT to Copy Labels)',
                              enabled=False)
-        copyToNextImg = action('Copy to Next', self.copyToNextImg,
-                             shortcuts['open_next'], 'copy-next', u'Copy to Next',
-                             enabled=False)
-        copyToPrevImg = action('Copy to Prev', self.copyToPrevImg,
-                             shortcuts['copy_prev'], 'copy-prev', u'Copy to Prev',
-                             enabled=False)
-
         save = action('&Save', self.saveFile, shortcuts['save'], 'save',
                       'Save labels to file', enabled=False)
         saveAs = action('&Save As', self.saveFileAs, shortcuts['save_as'],
@@ -431,8 +424,10 @@ class MainWindow(QtWidgets.QMainWindow, WindowMixin):
             labelList=labelMenu,
         )
 
-        addActions(self.menus.file, (open_, openNextImg, openPrevImg, opendir,
+        addActions(self.menus.file, (open_, openNextImg, openPrevImg, None, 
+                                     opendir,
                                      self.menus.recentFiles,
+                                     None,
                                      save, saveAs, close, None, quit))
         addActions(self.menus.help, (help,))
         addActions(self.menus.view, (
@@ -546,6 +541,7 @@ class MainWindow(QtWidgets.QMainWindow, WindowMixin):
 
         self.populateModeActions()
 
+        self.copy_prev_shapes = {}
         # self.firstStart = True
         # if self.firstStart:
         #    QWhatsThis.enterWhatsThisMode()
@@ -1012,15 +1008,23 @@ class MainWindow(QtWidgets.QMainWindow, WindowMixin):
             data = imgBytesIO.read()
         return data
 
-    def loadFile(self, filename=None):
+    def loadFile(self, filename=None, copy_prev_shapes=False):
         """Load the specified file, or the last opened file if None."""
-        # changing fileListWidget loads file
+        if filename in self.copy_prev_shapes:
+            copy_prev_shapes = self.copy_prev_shapes.pop(filename)
+        
+        # changing fileListWidget loads files
         if (filename in self.imageList and
                 self.fileListWidget.currentRow() !=
                 self.imageList.index(filename)):
+            if copy_prev_shapes:
+                self.copy_prev_shapes[filename] = True
             self.fileListWidget.setCurrentRow(self.imageList.index(filename))
             self.fileListWidget.repaint()
             return
+        
+        if copy_prev_shapes:
+            prev_shapes = [shape for _, shape in self.labelList.itemsToShapes]
 
         self.resetState()
         self.canvas.setEnabled(False)
@@ -1094,17 +1098,24 @@ class MainWindow(QtWidgets.QMainWindow, WindowMixin):
             self.loadFlags({k: False for k in self._config['flags']})
         if self._config['keep_prev']:
             self.loadShapes(prev_shapes)
-        if self.labelFile:
+        
+        self.setClean()
+        self.canvas.setEnabled(True)
+
+        if copy_prev_shapes and prev_shapes:
+            self.loadShapes(prev_shapes)
+            self.setDirty()
+
+        elif self.labelFile:
             self.loadLabels(self.labelFile.shapes)
             if self.labelFile.flags is not None:
                 self.loadFlags(self.labelFile.flags)
-        self.setClean()
-        self.canvas.setEnabled(True)
+  
         self.adjustScale(initial=True)
         self.paintCanvas()
         self.addRecentFile(self.filename)
         self.toggleActions(True)
-        self.status("Loaded %s" % os.path.basename(str(filename)))
+        self.status("Loaded {}".format(os.path.basename(str(filename))))
         return True
 
     def resizeEvent(self, event):
@@ -1160,7 +1171,7 @@ class MainWindow(QtWidgets.QMainWindow, WindowMixin):
         if self.mayContinue():
             self.loadFile(filename)
 
-    def openPrevImg(self, _value=False, copy_annotations=False):
+    def openPrevImg(self, _value=False):
         if not self.mayContinue():
             return
 
@@ -1171,25 +1182,28 @@ class MainWindow(QtWidgets.QMainWindow, WindowMixin):
             return
 
         currIndex = self.imageList.index(self.filename)
+        copy_prev_shapes = False
         if currIndex - 1 >= 0:
+            if QtGui.QGuiApplication.keyboardModifiers() == (QtCore.Qt.ControlModifier | QtCore.Qt.AltModifier):
+                copy_prev_shapes = True
             filename = self.imageList[currIndex - 1]
             if filename:
-                self.loadFile(filename)
+                self.loadFile(filename, copy_prev_shapes=copy_prev_shapes)
     
-    def copyToPrevImg(self, _value=False):
-        self.openPrevImg(_value, copy_annotations=True)
-
-    def openNextImg(self, _value=False, load=True, copy_annotations=False):
+    def openNextImg(self, _value=False, load=True):
         if not self.mayContinue():
             return
-
+        
         if len(self.imageList) <= 0:
             return
 
         filename = None
+        copy_prev_shapes = False
         if self.filename is None:
             filename = self.imageList[0]
         else:
+            if QtGui.QGuiApplication.keyboardModifiers() == (QtCore.Qt.ControlModifier | QtCore.Qt.AltModifier):
+                copy_prev_shapes = True
             currIndex = self.imageList.index(self.filename)
             if currIndex + 1 < len(self.imageList):
                 filename = self.imageList[currIndex + 1]
@@ -1198,10 +1212,7 @@ class MainWindow(QtWidgets.QMainWindow, WindowMixin):
         self.filename = filename
 
         if self.filename and load:
-            self.loadFile(self.filename)
-
-    def copyToNextImg(self, _value=False, load=True):
-        self.openNextImg(_value, load=load, copy_annotations=True)
+            self.loadFile(self.filename, copy_prev_shapes=copy_prev_shapes)
 
     def openFile(self, _value=False):
         if not self.mayContinue():
@@ -1218,6 +1229,7 @@ class MainWindow(QtWidgets.QMainWindow, WindowMixin):
             filename, _ = filename
         filename = str(filename)
         if filename:
+            print("loadFile({}) called from openFile".format(filename))
             self.loadFile(filename)
 
     def saveFile(self, _value=False):

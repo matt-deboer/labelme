@@ -1037,8 +1037,10 @@ class MainWindow(QtWidgets.QMainWindow, WindowMixin):
             self.fileListWidget.repaint()
             return
         
+        copied_from = ''
         if copy_prev_shapes:
             prev_shapes = [shape for _, shape in self.labelList.itemsToShapes]
+            copied_from = ' (copied shapes from {})'.format(os.path.basename(self.filename))
 
         self.resetState()
         self.canvas.setEnabled(False)
@@ -1129,7 +1131,7 @@ class MainWindow(QtWidgets.QMainWindow, WindowMixin):
         self.paintCanvas()
         self.addRecentFile(self.filename)
         self.toggleActions(True)
-        self.status("Loaded {}".format(os.path.basename(str(filename))))
+        self.status("Loaded {}{}".format(os.path.basename(str(filename)), copied_from))
         return True
 
     def resizeEvent(self, event):

@@ -47,6 +47,7 @@ shortcuts:
   save: Ctrl+S
   save_as: Ctrl+Shift+S
   auto_save: Ctrl+Alt+S
+  save_to: Ctrl+Shift+D
 
   open_next: 
     - D

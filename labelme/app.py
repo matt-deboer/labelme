@@ -67,7 +67,7 @@ class WindowMixin(object):
 class MainWindow(QtWidgets.QMainWindow, WindowMixin):
     FIT_WINDOW, FIT_WIDTH, MANUAL_ZOOM = 0, 1, 2
 
-    def __init__(self, config=None, filename=None, output=None):
+    def __init__(self, config=None, filename=None, output=None, annotations=None):
         # see labelme/config/default_config.yaml for valid configuration
         if config is None:
             config = get_config()
@@ -206,6 +206,8 @@ class MainWindow(QtWidgets.QMainWindow, WindowMixin):
                         'save-as', 'Save labels to a different file',
                         enabled=False)
 
+        changeAnnotationsDir = action('&Change Annotations Dir', self.changeAnnotationsDirDialog,
+                               shortcuts['save_to'], 'open', u'Change where annotations are loaded/saved')
         autosave = action("Save &Automatically", self.setAutoSave, shortcuts['auto_save'], 
             checkable=True, enabled=True)
         autosave.setChecked(self._config['auto_save'])
@@ -330,6 +332,7 @@ class MainWindow(QtWidgets.QMainWindow, WindowMixin):
         zoomActions = (self.zoomWidget, zoomIn, zoomOut, zoomOrg,
                        fitWindow, fitWidth)
         self.zoomMode = self.FIT_WINDOW
+        fitWindow.setChecked(Qt.Checked)
         self.scalers = {
             self.FIT_WINDOW: self.scaleFitWindow,
             self.FIT_WIDTH: self.scaleFitWidth,
@@ -368,6 +371,7 @@ class MainWindow(QtWidgets.QMainWindow, WindowMixin):
         # Store actions for further handling.
         self.actions = struct(
             autosave=autosave,
+            changeAnnotationsDir=changeAnnotationsDir,
             save=save, saveAs=saveAs, open=open_, close=close,
             lineColor=color1, fillColor=color2,
             delete=delete, edit=edit, copy=copy,
@@ -435,6 +439,7 @@ class MainWindow(QtWidgets.QMainWindow, WindowMixin):
                                      self.menus.recentFiles,
                                      None,
                                      save, saveAs, None,
+                                     changeAnnotationsDir,
                                      autosave,
                                      None,
                                      close, None, quit))
@@ -509,6 +514,7 @@ class MainWindow(QtWidgets.QMainWindow, WindowMixin):
         self.zoom_level = 100
         self.fit_window = False
 
+        self.annotationsDir = annotations
         if filename is not None and os.path.isdir(filename):
             self.importDirImages(filename, load=False)
         else:
@@ -551,8 +557,6 @@ class MainWindow(QtWidgets.QMainWindow, WindowMixin):
         self.populateModeActions()
 
         self.copy_prev_shapes = {}
-
-        self.actions.fitWindow.setChecked(Qt.Checked)
         # self.firstStart = True
         # if self.firstStart:
         #    QWhatsThis.enterWhatsThisMode()
@@ -582,7 +586,9 @@ class MainWindow(QtWidgets.QMainWindow, WindowMixin):
 
     def setDirty(self):
         if self._config['auto_save'] or self.actions.autosave.isChecked():
-            label_file = os.path.splitext(self.imagePath)[0] + '.json'
+            label_file = os.path.join(
+                self.annotationsDir,
+                os.path.basename(os.path.splitext(self.imagePath)[0] + '.json'))
             self.saveLabels(label_file)
             return
         self.dirty = True
@@ -1271,14 +1277,14 @@ class MainWindow(QtWidgets.QMainWindow, WindowMixin):
     def saveFileDialog(self):
         caption = '%s - Choose File' % __appname__
         filters = 'Label files (*%s)' % LabelFile.suffix
-        dlg = QtWidgets.QFileDialog(self, caption, self.currentPath(), filters)
+        dlg = QtWidgets.QFileDialog(self, caption, self.annotationsDir, filters)
         dlg.setDefaultSuffix(LabelFile.suffix[1:])
         dlg.setAcceptMode(QtWidgets.QFileDialog.AcceptSave)
         dlg.setOption(QtWidgets.QFileDialog.DontConfirmOverwrite, False)
         dlg.setOption(QtWidgets.QFileDialog.DontUseNativeDialog, False)
         basename = os.path.splitext(self.filename)[0]
         default_labelfile_name = os.path.join(
-            self.currentPath(), basename + LabelFile.suffix)
+            self.annotationsDir, basename + LabelFile.suffix)
         filename = dlg.getSaveFileName(
             self, 'Choose File', default_labelfile_name,
             'Label files (*%s)' % LabelFile.suffix)
@@ -1410,6 +1416,27 @@ class MainWindow(QtWidgets.QMainWindow, WindowMixin):
             QtWidgets.QFileDialog.DontResolveSymlinks))
         self.importDirImages(targetDirPath)
 
+    def changeAnnotationsDirDialog(self, _value=False):
+        
+        targetDirPath = str(QtWidgets.QFileDialog.getExistingDirectory(
+            self, '%s - Save/Load Annotations in Directory' % __appname__, self.annotationsDir,
+            QtWidgets.QFileDialog.ShowDirsOnly |
+            QtWidgets.QFileDialog.DontResolveSymlinks))
+
+        if targetDirPath is not None and len(targetDirPath) > 1:
+            self.annotationsDir = targetDirPath
+
+        self.statusBar().showMessage('%s . Annotations will be saved/loaded in %s' %
+                                     ('Change Annotations Dir', self.annotationsDir))
+        self.statusBar().show()
+
+        current_filename = self.filename
+        self.importDirImages(self.lastOpenDir, annpath=targetDirPath, load=False)
+        
+        # retain currently selected file
+        self.fileListWidget.setCurrentRow(self.imageList.index(current_filename))
+        self.fileListWidget.repaint()
+
     @property
     def imageList(self):
         lst = []
@@ -1418,20 +1445,27 @@ class MainWindow(QtWidgets.QMainWindow, WindowMixin):
             lst.append(item.text())
         return lst
 
-    def importDirImages(self, dirpath, pattern=None, load=True):
+    def importDirImages(self, imgpath, annpath=None, pattern=None, load=True):
         self.actions.openNextImg.setEnabled(True)
         self.actions.openPrevImg.setEnabled(True)
 
-        if not self.mayContinue() or not dirpath:
+        if not self.mayContinue() or not imgpath:
             return
 
-        self.lastOpenDir = dirpath
+        if annpath is None:
+            if self.annotationsDir is None:
+                annpath = imgpath
+            else:
+                annpath = self.annotationsDir
+        
+        self.lastOpenDir = imgpath
+        self.annotationsDir = annpath
         self.filename = None
         self.fileListWidget.clear()
-        for filename in self.scanAllImages(dirpath):
+        for filename in self.scanAllImages(imgpath):
             if pattern and pattern not in filename:
                 continue
-            label_file = os.path.splitext(filename)[0] + '.json'
+            label_file = os.path.join(annpath, os.path.basename(os.path.splitext(filename)[0] + '.json'))
             item = QtWidgets.QListWidgetItem(filename)
             item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
             if QtCore.QFile.exists(label_file) and \
